@@ -1,6 +1,6 @@
 # LOOP
 
-## v1.2 — VISUALS
+## v1.3 — VISUALS
 
 A mobile-first roguelite about dying, learning and returning.
 
@@ -16,3 +16,7 @@ A mobile-first roguelite about dying, learning and returning.
 Open the project in Godot 4.x and run `Main.tscn`.
 
 No external game assets are required; the visual pass is drawn procedurally by Godot.
+
+
+## v1.3 — ECHO
+The labyrinth now shifts between chamber themes, dimensional seams appear, and a late-run Echo Stalker uses traces of the previous run.
