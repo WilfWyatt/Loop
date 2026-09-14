@@ -143,7 +143,7 @@ func _spawn_enemy(intensity: float) -> void:
     elif side == 1: p = Vector2(WORLD.end.x-8, rng.randf_range(WORLD.position.y, WORLD.end.y))
     elif side == 2: p = Vector2(rng.randf_range(WORLD.position.x, WORLD.end.x), WORLD.end.y-8)
     else: p = Vector2(WORLD.position.x+8, rng.randf_range(WORLD.position.y, WORLD.end.y))
-    var elite := rng.randf() < min(0.12, elapsed/500.0)
+    var elite: bool = rng.randf() < min(0.12, elapsed/500.0)
     enemies.append({"pos":p,"hp":(32.0 + elapsed*1.7)*intensity*(2.0 if elite else 1.0),"max_hp":(32.0+elapsed*1.7)*intensity*(2.0 if elite else 1.0),"speed":70.0+elapsed*1.3+(30 if elite else 0),"r":(15.0 if not elite else 22.0),"elite":elite,"xp":(12 if elite else 5)})
 
 func _spawn_boss() -> void:
