@@ -1,6 +1,6 @@
 extends Node2D
 
-# LOOP v0.8 - MIRROR: the previous loop starts fighting beside you.
+# LOOP v0.9 - RITUAL: the loop starts developing a visual identity and combat rhythm.
 # Procedural graphics only: no external assets required.
 
 const W := 720.0
@@ -62,6 +62,9 @@ var ghost_weapon := 0
 var frenzy_timer := 0.0
 var boss_phase := 0
 var boss_attack_timer := 2.0
+var screen_flash := 0.0
+var pulse_ring := 0.0
+var ritual_level := 0
 
 var ui: CanvasLayer
 var hp_bar: ProgressBar
@@ -784,8 +787,13 @@ func _update_ui() -> void:
         banner.text = "RESET IN %05.1fs" % remain
 
 func _draw() -> void:
-    draw_rect(Rect2(0,0,W,H),Color("10111c"))
+    # Layered procedural arena: dark vignette + moving grid + subtle room bands.
+    draw_rect(Rect2(0,0,W,H),Color("0b0d16"))
+    draw_rect(Rect2(8,112,W-16,H-112),Color("101522"))
     draw_rect(WORLD,Color("171b2b"))
+    draw_rect(Rect2(WORLD.position+Vector2(18,18),WORLD.size-Vector2(36,36)),Color("151a2a"),false,2)
+    draw_circle(Vector2(W/2, H/2+70), 245.0+sin(elapsed*0.8)*8.0, Color("26304d18"))
+    draw_circle(Vector2(W/2, H/2+70), 245.0, Color("53618f22"), false, 2)
     draw_rect(WORLD,Color("454a67"),false,3)
     var off: float = fmod(elapsed*18.0,60.0)
     for x in range(int(WORLD.position.x)-60,int(WORLD.end.x)+60,60):
@@ -835,6 +843,13 @@ func _draw() -> void:
         draw_circle(player.pos, 90.0 + sin(elapsed*8.0)*8.0, Color("8fdcff55"), false, 4)
     if frenzy_timer > 0.0:
         draw_circle(player.pos, 52.0 + sin(elapsed*14.0)*6.0, Color("ffd45c66"), false, 5)
+    # Combat rhythm indicator.
+    if ritual_level > 0:
+        var ritual_radius := 72.0 + ritual_level*8.0
+        draw_arc(player.pos, ritual_radius, -PI/2.0, -PI/2.0 + TAU*float(ritual_level)/3.0, 24, Color("ffd45c"), 7.0)
+    if pulse_ring > 0.0:
+        var pr := 90.0 + (0.75-pulse_ring)*420.0
+        draw_arc(player.pos, pr, 0.0, TAU, 48, Color("8fdcff") if pulse_ring > 0.25 else Color("8fdcff55"), 6.0)
     draw_circle(joystick_pos,68.0,Color("ffffff18"))
     draw_circle(joystick_pos,68.0,Color("ffffff66"),false,3)
     var knob: Vector2 = joystick_pos+touch_dir*45.0
