@@ -1,36 +1,18 @@
 # LOOP
 
-**v0.7 — PARADOX**
+## v1.2 — VISUALS
 
-A portrait mobile roguelite built in Godot 4.7. No external assets are required.
+A mobile-first roguelite about dying, learning and returning.
 
-New in v0.7:
-- Loop rules that change each run
-- Four travelling anomalies with risk/reward effects
-- Persistent relics unlocked through repeated loops
-- A ghost trace of your previous run that becomes part of future runs
-- Improved mobile readability and virtual joystick
-- Existing combat, upgrades, BLINK, TIME PULSE, bosses and persistent Echoes retained
+### This build
+- Dark-fantasy procedural dungeon visual pass
+- Stone tile floor, brick walls, torches and ambient runes
+- Redesigned player, enemy, elite and boss silhouettes
+- More readable projectiles, pickups and portal effects
+- Stronger combat feedback while retaining the existing mechanics
+- Virtual joystick and ability controls remain phone-friendly
 
-Open `project.godot` in Godot 4.7+ and run `Main.tscn`.
+### Run
+Open the project in Godot 4.x and run `Main.tscn`.
 
-
-## v0.8 — MIRROR
-- Previous-loop ghost now actively attacks, using the previous loop's weapon style.
-- Boss gains three phases and escalating radial attacks.
-- Kill chains can trigger FRENZY and PARADOX CHAIN bonuses.
-- Added permanent relic milestones through loop 15.
-- Fixed anomaly movement so slowing time no longer permanently destroys enemy speed.
-- Mobile controls remain touch-first with visible joystick.
-
-
-## v1.0 additions
-- Ritual combo system
-- Boss attack telegraphs
-- Damage feedback
-- Ritual Mastery upgrade
-- Expanded combat readability for mobile
-
-
-## v1.1 — LABYRINTH
-Optional exit portals now appear around 20s and 40s. Entering one advances to a harder chamber, clears the arena, grants a small reward and changes the pressure of the run. Ignoring the portal is always allowed.
+No external game assets are required; the visual pass is drawn procedurally by Godot.
