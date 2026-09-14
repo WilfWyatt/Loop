@@ -65,6 +65,10 @@ var boss_attack_timer := 2.0
 var screen_flash := 0.0
 var pulse_ring := 0.0
 var ritual_level := 0
+var ritual_timer := 0.0
+var ritual_charge := 0
+var damage_flash := 0.0
+var boss_telegraph := 0.0
 
 var ui: CanvasLayer
 var hp_bar: ProgressBar
@@ -114,6 +118,11 @@ func _new_loop() -> void:
     ghost_fire_timer = 1.0
     ghost_weapon = int(player.weapon)
     frenzy_timer = 0.0
+    ritual_level = 0
+    ritual_timer = 0.0
+    ritual_charge = 0
+    damage_flash = 0.0
+    boss_telegraph = 0.0
     boss_phase = 0
     boss_attack_timer = 2.0
     ghost_path_buffer.clear()
@@ -235,6 +244,9 @@ func _build_ui() -> void:
 
 func _process(delta: float) -> void:
     dash_flash = max(0.0, dash_flash-delta)
+    ritual_timer = max(0.0, ritual_timer-delta)
+    damage_flash = max(0.0, damage_flash-delta)
+    boss_telegraph = max(0.0, boss_telegraph-delta)
     if choosing:
         queue_redraw()
         return
@@ -249,6 +261,8 @@ func _process(delta: float) -> void:
     anomaly_time = max(0.0, anomaly_time-delta)
     anomaly_active = anomaly_time > 0.0
     player.combo_timer = max(0.0, float(player.combo_timer)-delta)
+    if ritual_timer <= 0.0:
+        ritual_level = 0
     frenzy_timer = max(0.0, frenzy_timer-delta)
     if player.combo_timer <= 0.0:
         player.combo = 0
@@ -534,6 +548,7 @@ func _update_enemy_bullets(delta: float) -> void:
         b.life -= delta
         if b.pos.distance_to(player.pos) < 15.0:
             player.hp -= b.damage
+            damage_flash = 0.16
             _burst(player.pos,6,100)
             enemy_bullets.remove_at(i)
             if player.hp <= 0.0:
@@ -570,6 +585,7 @@ func _update_enemies(delta: float) -> void:
                 _burst(e.pos,30+boss_phase*15,260)
             if boss_attack_timer <= 0.0:
                 boss_attack_timer = 2.2 if boss_phase == 0 else (1.55 if boss_phase == 1 else 1.0)
+                boss_telegraph = 0.42
                 var radial_count: int = 8+boss_phase*4
                 for k in radial_count:
                     var a: float = float(k)*TAU/float(radial_count)+elapsed*0.35
@@ -579,6 +595,7 @@ func _update_enemies(delta: float) -> void:
         if dist < e.r+15.0:
             var contact: float = 22.0 if e.has("boss") else (11.0 if e.get("elite",false) else 8.0)
             player.hp -= contact*delta
+            damage_flash = 0.08
             if player.hp <= 0.0:
                 _die()
         enemies[i] = e
@@ -587,7 +604,15 @@ func _kill_enemy(index: int, e: Dictionary) -> void:
     enemies.remove_at(index)
     meta.kills += 1
     player.combo = int(player.combo) + 1
-    player.combo_timer = 2.4
+    player.combo_timer = 2.4 + float(ritual_charge)*0.35
+    if int(player.combo) % 5 == 0:
+        ritual_level = min(3, int(player.combo)/5)
+        ritual_timer = 3.5
+        var ritual_bonus: int = 80 * ritual_level
+        score += ritual_bonus
+        player.time_charge = min(6.0, float(player.time_charge)+0.25)
+        _announce("RITUAL %d — +%d" % [ritual_level, ritual_bonus])
+        _burst(e.pos, 10 + ritual_level*6, 210)
     if int(player.combo) == 10:
         frenzy_timer = 6.0
         _announce("FRENZY — 10 KILL CHAIN")
@@ -655,7 +680,8 @@ func _open_upgrade() -> void:
         ["RICOCHET","Shot speed +25%",func(): player.shot_speed *= 1.25],
         ["TWIN FIRE","Fire an extra shot",func(): player.shots += 1],
         ["PIERCING","Shots pierce +1 enemy",func(): player.pierce += 1],
-        ["VOID SHARDS","Orbiting shard damage +1",func(): player.orbit += 1; player.orbit_damage += 8.0]
+        ["VOID SHARDS","Orbiting shard damage +1",func(): player.orbit += 1; player.orbit_damage += 8.0],
+        ["RITUAL MASTERY","Longer combo window + ritual power",func(): player.combo_timer += 1.5; ritual_charge += 1; player.damage *= 1.08]
     ]
     pool.shuffle()
     upgrade_choices = pool.slice(0,3)
@@ -777,6 +803,8 @@ func _update_ui() -> void:
     var remain: float = max(0.0,LOOP_LENGTH-elapsed)
     info.text = "♥ %d/%d   ECHO %d   KILLS %d   x%d   LOOP %02d" % [int(player.hp),int(player.max_hp),int(meta.echoes),int(meta.kills),int(player.combo),int(meta.loops)+1]
     var fury_text: String = "   •   FRENZY %0.1fs" % frenzy_timer if frenzy_timer > 0.0 else ""
+    if ritual_timer > 0.0:
+        fury_text += "   •   RITUAL %d" % ritual_level
     rule_label.text = "RULE: %s   •   TIME %0.1f%s" % [loop_rule, float(player.time_charge), fury_text]
     hp_bar.value = player.hp/player.max_hp*100.0
     xp_bar.value = float(player.xp)/float(player.next_xp)*100.0
@@ -815,6 +843,8 @@ func _draw() -> void:
     for b in enemy_bullets:
         draw_circle(b.pos,8.0,Color("ff4f75"))
     for e in enemies:
+        if e.has("boss") and boss_telegraph > 0.0:
+            draw_circle(e.pos, 105.0 + (0.42-boss_telegraph)*90.0, Color("ff557744"), false, 5)
         var c := Color("ff5577") if e.has("boss") else Color("b35cff") if e.get("elite",false) else Color("ff874d") if e.get("kind","") != "shooter" else Color("ffcf5c")
         draw_circle(e.pos,float(e.r),c)
         draw_circle(e.pos,float(e.r)+3.0,Color("ffffff55"),false,2)
@@ -843,6 +873,10 @@ func _draw() -> void:
         draw_circle(player.pos, 90.0 + sin(elapsed*8.0)*8.0, Color("8fdcff55"), false, 4)
     if frenzy_timer > 0.0:
         draw_circle(player.pos, 52.0 + sin(elapsed*14.0)*6.0, Color("ffd45c66"), false, 5)
+    if ritual_timer > 0.0:
+        draw_circle(player.pos, 62.0 + ritual_level*12.0 + sin(elapsed*12.0)*5.0, Color("ffd45c55"), false, 4)
+    if damage_flash > 0.0:
+        draw_rect(Rect2(0,0,W,H), Color(1,0.2,0.3,damage_flash*0.45))
     # Combat rhythm indicator.
     if ritual_level > 0:
         var ritual_radius := 72.0 + ritual_level*8.0
