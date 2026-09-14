@@ -1,6 +1,6 @@
 extends Node2D
 
-# LOOP v0.9 - RITUAL: the loop starts developing a visual identity and combat rhythm.
+# LOOP v1.1 - LABYRINTH: optional room portals create a multi-room run without breaking the core 60s loop.
 # Procedural graphics only: no external assets required.
 
 const W := 720.0
@@ -69,6 +69,11 @@ var ritual_timer := 0.0
 var ritual_charge := 0
 var damage_flash := 0.0
 var boss_telegraph := 0.0
+var room_index := 1
+var portal_active := false
+var portal_pos := Vector2.ZERO
+var portal_pulse := 0.0
+var room_message := ""
 
 var ui: CanvasLayer
 var hp_bar: ProgressBar
@@ -125,6 +130,11 @@ func _new_loop() -> void:
     boss_telegraph = 0.0
     boss_phase = 0
     boss_attack_timer = 2.0
+    room_index = 1
+    portal_active = false
+    portal_pos = Vector2.ZERO
+    portal_pulse = 0.0
+    room_message = "CHAMBER I"
     ghost_path_buffer.clear()
     _choose_loop_rule()
     player.combo = 0
@@ -279,6 +289,7 @@ func _process(delta: float) -> void:
     _update_orbit()
     _spawn_enemies(delta)
     _update_anomalies(delta)
+    _update_room_portal(delta)
     _update_ghost(delta)
     _update_bullets(delta)
     _update_enemy_bullets(delta)
@@ -461,8 +472,41 @@ func _nearest_enemy() -> Dictionary:
             best = e
     return best
 
+func _update_room_portal(delta: float) -> void:
+    portal_pulse += delta
+    # Optional portal windows at 20s and 40s. The player can ignore them and keep fighting.
+    if not portal_active and room_index < 3 and elapsed >= float(room_index * 20 - 2):
+        portal_active = true
+        portal_pos = Vector2(
+            WORLD.position.x + 72.0 if room_index % 2 == 1 else WORLD.end.x - 72.0,
+            rng.randf_range(WORLD.position.y + 170.0, WORLD.end.y - 170.0)
+        )
+        room_message = "EXIT OPEN — CHAMBER %s" % ("II" if room_index == 1 else "III")
+        _announce(room_message)
+    if portal_active and portal_pos.distance_to(player.pos) < 54.0:
+        _enter_room()
+
+func _enter_room() -> void:
+    portal_active = false
+    room_index += 1
+    enemies.clear()
+    enemy_bullets.clear()
+    bullets.clear()
+    anomalies.clear()
+    score += 350 * room_index
+    player.time_charge = min(6.0, float(player.time_charge) + 1.0)
+    player.hp = min(player.max_hp, player.hp + 12.0)
+    if room_index == 2:
+        _announce("CHAMBER II — PRESSURE RISES")
+    else:
+        _announce("CHAMBER III — THE LOOP IS THIN")
+    for i in 4 + room_index * 2:
+        _spawn_enemy((1.25 + float(room_index) * 0.25), i % 3 == 0)
+    _burst(player.pos, 34, 300)
+
 func _spawn_enemies(delta: float) -> void:
-    var intensity: float = (1.0 + elapsed/38.0 + float(meta.loops)*0.04) * rule_multiplier
+    var room_pressure: float = 1.0 + float(max(0, room_index - 1)) * 0.18
+    var intensity: float = (1.0 + elapsed/38.0 + float(meta.loops)*0.04) * rule_multiplier * room_pressure
     if spawn_timer <= 0.0:
         spawn_timer = max(0.18, 0.78-elapsed*0.005)
         var count: int = 1
@@ -805,7 +849,7 @@ func _update_ui() -> void:
     var fury_text: String = "   •   FRENZY %0.1fs" % frenzy_timer if frenzy_timer > 0.0 else ""
     if ritual_timer > 0.0:
         fury_text += "   •   RITUAL %d" % ritual_level
-    rule_label.text = "RULE: %s   •   TIME %0.1f%s" % [loop_rule, float(player.time_charge), fury_text]
+    rule_label.text = "%s   •   RULE: %s   •   TIME %0.1f%s" % [room_message, loop_rule, float(player.time_charge), fury_text]
     hp_bar.value = player.hp/player.max_hp*100.0
     xp_bar.value = float(player.xp)/float(player.next_xp)*100.0
     dash_button.text = "BLINK %0.1fs" % dash_timer if dash_timer > 0.0 else "BLINK"
@@ -828,6 +872,16 @@ func _draw() -> void:
         draw_line(Vector2(x+off,WORLD.position.y),Vector2(x+off,WORLD.end.y),Color("242942"),1)
     for y in range(int(WORLD.position.y)-60,int(WORLD.end.y)+60,60):
         draw_line(Vector2(WORLD.position.x,y+off),Vector2(WORLD.end.x,y+off),Color("242942"),1)
+    if portal_active:
+        var pp := 1.0 + sin(portal_pulse * 7.0) * 0.12
+        draw_circle(portal_pos, 44.0 * pp, Color("8d7cff22"))
+        draw_circle(portal_pos, 32.0 * pp, Color("8d7cff"), false, 6)
+        draw_circle(portal_pos, 18.0, Color("d6d0ff"))
+        for k in 4:
+            var pa: float = portal_pulse * 2.0 + float(k) * TAU / 4.0
+            var orbit_p: Vector2 = portal_pos + Vector2.from_angle(pa) * (52.0 * pp)
+            draw_circle(orbit_p, 5.0, Color("ffffff"))
+
     for a in anomalies:
         var ac := Color("67f0c0") if a.type=="HEAL" else Color("ffd15c") if a.type=="GAMBLE" else Color("bd8cff") if a.type=="ECHO" else Color("72c9ff")
         var pulse := 1.0 + sin(Time.get_ticks_msec()/160.0)*0.10
