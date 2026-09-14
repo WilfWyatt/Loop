@@ -74,6 +74,8 @@ var portal_active := false
 var portal_pos := Vector2.ZERO
 var portal_pulse := 0.0
 var room_message := ""
+var stalker_spawned := false
+var chamber_theme := 0
 
 var ui: CanvasLayer
 var hp_bar: ProgressBar
@@ -135,6 +137,8 @@ func _new_loop() -> void:
     portal_pos = Vector2.ZERO
     portal_pulse = 0.0
     room_message = "CHAMBER I"
+    stalker_spawned = false
+    chamber_theme = 0
     ghost_path_buffer.clear()
     _choose_loop_rule()
     player.combo = 0
@@ -276,6 +280,9 @@ func _process(delta: float) -> void:
     frenzy_timer = max(0.0, frenzy_timer-delta)
     if player.combo_timer <= 0.0:
         player.combo = 0
+    if elapsed >= 50.0 and not stalker_spawned:
+        _spawn_echo_stalker()
+        stalker_spawned = true
     if elapsed >= LOOP_LENGTH:
         _complete_loop()
         return
@@ -489,6 +496,7 @@ func _update_room_portal(delta: float) -> void:
 func _enter_room() -> void:
     portal_active = false
     room_index += 1
+    chamber_theme = (chamber_theme + 1) % 4
     enemies.clear()
     enemy_bullets.clear()
     bullets.clear()
@@ -557,6 +565,24 @@ func _spawn_enemy(intensity: float, force_elite: bool = false) -> void:
     if kind == "shooter": speed *= 0.72
     if elite: speed += 28.0
     enemies.append({"pos":p,"hp":hp,"max_hp":hp,"speed":speed,"r":22.0 if elite else 15.0,"elite":elite,"kind":kind,"xp":14 if elite else 6,"shot_cd":rng.randf_range(1.0,2.5)})
+
+func _spawn_echo_stalker() -> void:
+    var hp: float = 260.0 + float(meta.loops) * 55.0
+    var spawn_pos := WORLD.get_center() + Vector2(0, -250)
+    if not ghost_path.is_empty():
+        spawn_pos = ghost_path[ghost_path.size() / 2]
+    enemies.append({
+        "pos": spawn_pos,
+        "hp": hp,
+        "max_hp": hp,
+        "speed": 105.0,
+        "r": 24.0,
+        "kind": "stalker",
+        "xp": 45,
+        "shot_cd": 1.8,
+        "memory": true
+    })
+    _announce("SOMETHING REMEMBERS...")
 
 func _spawn_boss() -> void:
     var hp: float = 900.0+float(meta.loops)*120.0
@@ -875,6 +901,14 @@ func _draw_floor() -> void:
     draw_rect(WORLD, Color("69718c"), false, 4)
     draw_rect(WORLD.grow(-8), Color("080a10"), false, 2)
 
+    # The labyrinth changes character between chambers.
+    var theme_col := Color("6b78a8") if chamber_theme == 0 else Color("7f5ca8") if chamber_theme == 1 else Color("a05c55") if chamber_theme == 2 else Color("4f9aa0")
+    draw_rect(WORLD.grow(-18), theme_col.darkened(0.72), false, 2)
+    for i in 5:
+        var a := elapsed*0.15 + float(i)*TAU/5.0
+        var p := WORLD.get_center() + Vector2.from_angle(a)*(270.0 + sin(elapsed*0.7+float(i))*18.0)
+        draw_circle(p, 3.0, theme_col)
+
 func _draw_wall_details() -> void:
     # Heavy brick frame makes the playfield feel like a real dungeon.
     var top := WORLD.position.y
@@ -964,7 +998,15 @@ func _draw_enemy_visual(e: Dictionary) -> void:
         draw_circle(p+Vector2(-18,-5),3,Color("3b0d18"))
         draw_circle(p+Vector2(18,-5),3,Color("3b0d18"))
         return
-    if kind=="shooter":
+    if kind=="stalker":
+        var pulse := 1.0 + sin(elapsed*9.0)*0.10
+        draw_circle(p, r+9.0*pulse, Color("c58cff22"))
+        draw_circle(p, r, Color("11101f"))
+        draw_arc(p, r+5.0, elapsed*2.0, elapsed*2.0+PI*1.4, 24, Color("d5b4ff"), 4)
+        draw_circle(p+Vector2(-7,-2),4,Color("ffffff"))
+        draw_circle(p+Vector2(7,-2),4,Color("ff5cf0"))
+        draw_line(p-Vector2(0,r+4), p+Vector2(0,r+13), Color("c58cffaa"), 3)
+    elif kind=="shooter":
         draw_colored_polygon(PackedVector2Array([p+Vector2(0,-r),p+Vector2(r,0),p+Vector2(0,r),p+Vector2(-r,0)]),body)
         draw_circle(p, r*0.43, Color("151927"))
         draw_circle(p, r*0.18, Color("fff0a0"))
@@ -1040,6 +1082,16 @@ func _draw() -> void:
 
     _draw_portal_visual()
 
+    # Thin dimensional seams: the dungeon is beginning to come apart.
+    for i in 4:
+        var seam_x := WORLD.position.x + 120.0 + float(i)*150.0 + sin(elapsed*0.5+float(i))*28.0
+        var seam_y := WORLD.position.y + 160.0 + fmod(elapsed*18.0+float(i)*220.0, WORLD.size.y-260.0)
+        draw_line(Vector2(seam_x,seam_y), Vector2(seam_x+18.0,seam_y-34.0), Color("b98cff25"), 2)
+        draw_line(Vector2(seam_x+18.0,seam_y-34.0), Vector2(seam_x+34.0,seam_y-6.0), Color("6fe9ff20"), 2)
+
+    if elapsed > 50.0 and not stalker_spawned:
+        draw_circle(player.pos, 130.0+sin(elapsed*10.0)*10.0, Color("c58cff22"), false, 5)
+
     for a in anomalies:
         var ac := Color("67f0c0") if a.type=="HEAL" else Color("ffd15c") if a.type=="GAMBLE" else Color("bd8cff") if a.type=="ECHO" else Color("72c9ff")
         var ap := 1.0+sin(Time.get_ticks_msec()/160.0)*0.12
@@ -1072,6 +1124,12 @@ func _draw() -> void:
         draw_circle(p.pos,max(1.0,float(p.life)*5.0),Color("ffffff"))
 
     _draw_hud_world()
+
+    # Chamber marker.
+    draw_rect(Rect2(W/2-86, WORLD.position.y+10, 172, 30), Color("070910aa"))
+    draw_string(ThemeDB.fallback_font, Vector2(W/2-80, WORLD.position.y+31),
+        "CHAMBER %s" % ["I","II","III","IV"][min(chamber_theme,3)],
+        HORIZONTAL_ALIGNMENT_CENTER, 160, 16, Color("e6e3ff"))
 
     # Mobile controls.
     draw_circle(joystick_pos,72.0,Color("ffffff10"))
