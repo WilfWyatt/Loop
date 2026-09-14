@@ -858,95 +858,234 @@ func _update_ui() -> void:
     if not game_over and banner.modulate.a < 0.1:
         banner.text = "RESET IN %05.1fs" % remain
 
-func _draw() -> void:
-    # Layered procedural arena: dark vignette + moving grid + subtle room bands.
-    draw_rect(Rect2(0,0,W,H),Color("0b0d16"))
-    draw_rect(Rect2(8,112,W-16,H-112),Color("101522"))
-    draw_rect(WORLD,Color("171b2b"))
-    draw_rect(Rect2(WORLD.position+Vector2(18,18),WORLD.size-Vector2(36,36)),Color("151a2a"),false,2)
-    draw_circle(Vector2(W/2, H/2+70), 245.0+sin(elapsed*0.8)*8.0, Color("26304d18"))
-    draw_circle(Vector2(W/2, H/2+70), 245.0, Color("53618f22"), false, 2)
-    draw_rect(WORLD,Color("454a67"),false,3)
-    var off: float = fmod(elapsed*18.0,60.0)
-    for x in range(int(WORLD.position.x)-60,int(WORLD.end.x)+60,60):
-        draw_line(Vector2(x+off,WORLD.position.y),Vector2(x+off,WORLD.end.y),Color("242942"),1)
-    for y in range(int(WORLD.position.y)-60,int(WORLD.end.y)+60,60):
-        draw_line(Vector2(WORLD.position.x,y+off),Vector2(WORLD.end.x,y+off),Color("242942"),1)
-    if portal_active:
-        var pp := 1.0 + sin(portal_pulse * 7.0) * 0.12
-        draw_circle(portal_pos, 44.0 * pp, Color("8d7cff22"))
-        draw_circle(portal_pos, 32.0 * pp, Color("8d7cff"), false, 6)
-        draw_circle(portal_pos, 18.0, Color("d6d0ff"))
-        for k in 4:
-            var pa: float = portal_pulse * 2.0 + float(k) * TAU / 4.0
-            var orbit_p: Vector2 = portal_pos + Vector2.from_angle(pa) * (52.0 * pp)
-            draw_circle(orbit_p, 5.0, Color("ffffff"))
+func _draw_floor() -> void:
+    # Stone floor tiles with alternating slabs and subtle cracks.
+    draw_rect(WORLD, Color("121522"))
+    var tile := 48
+    for y in range(int(WORLD.position.y), int(WORLD.end.y), tile):
+        for x in range(int(WORLD.position.x), int(WORLD.end.x), tile):
+            var ix := int((x-WORLD.position.x)/tile)
+            var iy := int((y-WORLD.position.y)/tile)
+            var base := Color("1b2030") if (ix+iy)%2 == 0 else Color("181d2b")
+            draw_rect(Rect2(x+1,y+1,tile-2,tile-2), base)
+            draw_line(Vector2(x+4,y+tile-3), Vector2(x+tile-8,y+tile-3), Color("0d1019"), 2)
+            if (ix*7+iy*11)%9 == 0:
+                draw_line(Vector2(x+12,y+16), Vector2(x+18,y+22), Color("0c0f18"), 2)
+                draw_line(Vector2(x+18,y+22), Vector2(x+28,y+18), Color("0c0f18"), 2)
+    draw_rect(WORLD, Color("69718c"), false, 4)
+    draw_rect(WORLD.grow(-8), Color("080a10"), false, 2)
 
-    for a in anomalies:
-        var ac := Color("67f0c0") if a.type=="HEAL" else Color("ffd15c") if a.type=="GAMBLE" else Color("bd8cff") if a.type=="ECHO" else Color("72c9ff")
-        var pulse := 1.0 + sin(Time.get_ticks_msec()/160.0)*0.10
-        draw_circle(a.pos, float(a.r)*pulse, ac, false, 5)
-        draw_circle(a.pos, 12.0, ac)
-    for d in drops:
-        var pulse: float = 1.0+sin(Time.get_ticks_msec()/130.0+float(d.pos.x))*0.12
-        var c := Color("5cf2a5") if d.kind=="xp" else Color("ffd85c") if d.kind=="echo" else Color("ff6f91")
-        draw_circle(d.pos,12.0*pulse,c)
-        draw_circle(d.pos,20.0*pulse,c,false,3)
-    for b in bullets:
-        draw_circle(b.pos,7.0,Color("fff3a1"))
-    for b in enemy_bullets:
-        draw_circle(b.pos,8.0,Color("ff4f75"))
-    for e in enemies:
-        if e.has("boss") and boss_telegraph > 0.0:
-            draw_circle(e.pos, 105.0 + (0.42-boss_telegraph)*90.0, Color("ff557744"), false, 5)
-        var c := Color("ff5577") if e.has("boss") else Color("b35cff") if e.get("elite",false) else Color("ff874d") if e.get("kind","") != "shooter" else Color("ffcf5c")
-        draw_circle(e.pos,float(e.r),c)
-        draw_circle(e.pos,float(e.r)+3.0,Color("ffffff55"),false,2)
-        if float(e.get("max_hp",0.0)) > 0.0:
-            draw_rect(Rect2(e.pos+Vector2(-e.r,-e.r-10),Vector2(e.r*2.0,4)),Color("351927"))
-            draw_rect(Rect2(e.pos+Vector2(-e.r,-e.r-10),Vector2(e.r*2.0*float(e.hp)/float(e.max_hp),4)),Color("ff5c7a"))
-    if int(player.orbit) > 0:
-        for i in int(player.orbit):
-            var a: float = elapsed*3.0+float(i)*TAU/float(player.orbit)
-            var op: Vector2 = player.pos+Vector2.from_angle(a)*(48.0+8.0*int(player.orbit))
-            draw_circle(op,9.0,Color("b9a1ff"))
-            draw_circle(op,14.0,Color("b9a1ff55"),false,2)
+func _draw_wall_details() -> void:
+    # Heavy brick frame makes the playfield feel like a real dungeon.
+    var top := WORLD.position.y
+    var left := WORLD.position.x
+    var right := WORLD.end.x
+    var bottom := WORLD.end.y
+    draw_rect(Rect2(left, top-26, WORLD.size.x, 26), Color("0b0d14"))
+    draw_rect(Rect2(left, bottom, WORLD.size.x, 26), Color("0b0d14"))
+    draw_rect(Rect2(left-26, top, 26, WORLD.size.y), Color("0b0d14"))
+    draw_rect(Rect2(right, top, 26, WORLD.size.y), Color("0b0d14"))
+    for y in range(int(top-22), int(bottom+4), 22):
+        var off := 0 if int((y-top)/22)%2 == 0 else 18
+        for x in range(int(left-18), int(right+18), 36):
+            draw_rect(Rect2(x+off,y,32,18), Color("252a3a"), true)
+            draw_rect(Rect2(x+off,y,32,18), Color("0b0e17"), false, 2)
+    # Corner runes.
+    for c in [Vector2(left+28,top+28),Vector2(right-28,top+28),Vector2(left+28,bottom-28),Vector2(right-28,bottom-28)]:
+        draw_circle(c, 15, Color("2c3750"), false, 2)
+        draw_arc(c, 10, elapsed*0.4, elapsed*0.4+PI*1.45, 18, Color("7358ff88"), 2)
+
+func _draw_torches() -> void:
+    var torches := [
+        Vector2(WORLD.position.x+42,WORLD.position.y+92),
+        Vector2(WORLD.end.x-42,WORLD.position.y+92),
+        Vector2(WORLD.position.x+42,WORLD.end.y-92),
+        Vector2(WORLD.end.x-42,WORLD.end.y-92),
+        Vector2(W/2,WORLD.position.y+30),
+        Vector2(W/2,WORLD.end.y-30)
+    ]
+    for i in torches.size():
+        var t: Vector2 = torches[i]
+        var flick := 1.0 + sin(elapsed*7.0+float(i))*0.12
+        draw_circle(t, 34.0*flick, Color("ff8a3d12"))
+        draw_circle(t, 20.0*flick, Color("ffb64d18"))
+        draw_rect(Rect2(t+Vector2(-3,8),Vector2(6,18)),Color("5a3a2b"))
+        draw_circle(t+Vector2(0,-2),7.0*flick,Color("ffcb62"))
+        draw_circle(t+Vector2(0,-7),4.0*flick,Color("fff0a1"))
+
+func _draw_portal_visual() -> void:
+    if not portal_active:
+        return
+    var pp := 1.0 + sin(portal_pulse*7.0)*0.10
+    draw_circle(portal_pos, 66.0*pp, Color("744cff16"))
+    draw_circle(portal_pos, 48.0*pp, Color("8b6cff33"))
+    draw_arc(portal_pos, 43.0*pp, -PI/2.0, PI*1.5, 40, Color("8d7cff"), 7.0)
+    draw_arc(portal_pos, 32.0*pp, PI/2.0, PI*2.5, 32, Color("d6d0ff"), 4.0)
+    draw_circle(portal_pos, 23.0, Color("070814"))
+    for k in 6:
+        var a := portal_pulse*1.8+float(k)*TAU/6.0
+        var orbit_p := portal_pos+Vector2.from_angle(a)*(55.0*pp)
+        draw_circle(orbit_p,5.0,Color("ffffff"))
+    draw_string(ThemeDB.fallback_font, portal_pos+Vector2(-58,-62), "EXIT", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("e7ddff"))
+
+func _draw_drop_visual(d: Dictionary) -> void:
+    var pulse := 1.0+sin(Time.get_ticks_msec()/130.0+float(d.pos.x))*0.12
+    var c := Color("63f4ad") if d.kind=="xp" else Color("ffd85c") if d.kind=="echo" else Color("ff6f91") if d.kind=="heal" else Color("72c9ff")
+    var p: Vector2 = d.pos
+    draw_circle(p, 18.0*pulse, c.darkened(0.65))
+    draw_circle(p, 12.0*pulse, c)
+    draw_circle(p, 5.0, Color("ffffffcc"))
+    if d.kind=="echo":
+        draw_arc(p, 20.0*pulse, 0, TAU, 18, Color("ffd85c99"), 3)
+    elif d.kind=="heal":
+        draw_rect(Rect2(p-Vector2(3,9),Vector2(6,18)),Color("fff1f5"))
+        draw_rect(Rect2(p-Vector2(9,3),Vector2(18,6)),Color("fff1f5"))
+    elif d.kind=="time":
+        draw_arc(p, 18.0*pulse, -PI/2, TAU-PI/2, 20, c, 3)
+
+func _draw_enemy_visual(e: Dictionary) -> void:
+    var p: Vector2 = e.pos
+    var r: float = float(e.r)
+    var is_boss := e.has("boss")
+    var elite := bool(e.get("elite",false))
+    var kind := str(e.get("kind","chaser"))
+    var bob := sin(elapsed*5.0+p.x*0.01)*2.0
+    p.y += bob
+    var body := Color("e84d65") if is_boss else Color("a957ff") if elite else Color("ff7048") if kind=="chaser" else Color("4dd7ff") if kind=="swift" else Color("e8c35a")
+    draw_circle(p+Vector2(0,5), r+6, Color("00000088"))
+    if is_boss:
+        draw_circle(p, r+14+sin(elapsed*3.0)*3.0, Color("ff335522"))
+        draw_circle(p, r, Color("2a1522"))
+        draw_circle(p, r-8, body)
+        draw_arc(p, r+9, elapsed, elapsed+PI*1.55, 32, Color("ffb35a"), 5)
+        draw_arc(p, r+18, -elapsed*0.7, -elapsed*0.7+PI*1.15, 24, Color("9c6cff"), 4)
+        draw_circle(p+Vector2(-18,-5),7,Color("ffdb62"))
+        draw_circle(p+Vector2(18,-5),7,Color("ffdb62"))
+        draw_circle(p+Vector2(-18,-5),3,Color("3b0d18"))
+        draw_circle(p+Vector2(18,-5),3,Color("3b0d18"))
+        return
+    if kind=="shooter":
+        draw_colored_polygon(PackedVector2Array([p+Vector2(0,-r),p+Vector2(r,0),p+Vector2(0,r),p+Vector2(-r,0)]),body)
+        draw_circle(p, r*0.43, Color("151927"))
+        draw_circle(p, r*0.18, Color("fff0a0"))
+    elif kind=="swift":
+        var pts := PackedVector2Array([p+Vector2(0,-r-5),p+Vector2(r+4,0),p+Vector2(0,r+5),p+Vector2(-r+4,0)])
+        draw_colored_polygon(pts,body)
+        draw_line(p+Vector2(-r,0),p+Vector2(-r-12,0),body,4)
+    else:
+        draw_circle(p,r,body)
+        draw_circle(p,r-5,Color("1a1724"))
+        draw_circle(p+Vector2(-5,-2),4,Color("ff4d61"))
+        draw_circle(p+Vector2(5,-2),4,Color("ff4d61"))
+        draw_line(p+Vector2(-7,8),p+Vector2(7,8),body,3)
+    if elite:
+        draw_arc(p,r+6,elapsed,elapsed+TAU*0.75,24,Color("d9b5ff"),3)
+    if float(e.get("max_hp",0.0))>0.0:
+        var bar_w := r*2.2
+        draw_rect(Rect2(p+Vector2(-bar_w/2,-r-15),Vector2(bar_w,5)),Color("090b12"))
+        draw_rect(Rect2(p+Vector2(-bar_w/2,-r-15),Vector2(bar_w*clamp(float(e.hp)/float(e.max_hp),0.0,1.0),5)),Color("ff5c7a"))
+
+func _draw_player_visual() -> void:
+    var p: Vector2 = player.pos
     var d: Vector2 = player.get("move_dir",Vector2.UP)
     if d.length()<0.1:
         d=Vector2.UP
-    var side: Vector2 = d.rotated(2.5)*18.0
-    var tip: Vector2 = player.pos+d*30.0
-    var ship_c := Color("ffffff") if dash_flash>0.0 else Color("5ce1ff")
-    draw_colored_polygon(PackedVector2Array([tip,player.pos-side,player.pos-side*0.35-d*5.0,player.pos+side]),ship_c)
-    if meta.loops > 0 and not ghost_path.is_empty():
-        for gp in ghost_path:
-            draw_circle(gp, 4.0, Color("bda8ff55"))
+    var side := d.rotated(PI/2.0)
+    var glow := Color("5ce1ff44") if dash_flash<=0.0 else Color("ffffff88")
+    draw_circle(p, 40.0+sin(elapsed*6.0)*3.0, glow)
+    draw_circle(p+Vector2(0,12), 23, Color("00000099"))
+    var cloak := Color("263b59")
+    var body_pts := PackedVector2Array([p+d*28.0,p-side*17.0-d*2.0,p-side*13.0-d*18.0,p+side*13.0-d*18.0,p+side*17.0-d*2.0])
+    draw_colored_polygon(body_pts,cloak)
+    draw_polyline(PackedVector2Array([p+d*28.0,p-side*17.0-d*2.0,p-side*13.0-d*18.0,p+side*13.0-d*18.0,p+side*17.0-d*2.0,p+d*28.0]),Color("6aa7d4"),3)
+    draw_circle(p+d*3.0,11,Color("d6e6ef"))
+    draw_circle(p+d*6.0+side*4.0,2.5,Color("ff5cf0"))
+    draw_circle(p+d*6.0-side*4.0,2.5,Color("ff5cf0"))
+    var gun_start := p+d*12.0+side*9.0
+    draw_line(gun_start,gun_start+d*24.0,Color("b8c5d6"),6)
+    draw_line(gun_start+d*3.0,gun_start+d*25.0,Color("ffca63"),3)
+    if int(player.orbit)>0:
+        for i in int(player.orbit):
+            var a := elapsed*3.0+float(i)*TAU/float(player.orbit)
+            var op := p+Vector2.from_angle(a)*(52.0+8.0*int(player.orbit))
+            draw_circle(op,10,Color("a98cff"))
+            draw_circle(op,16,Color("a98cff33"),false,3)
+
+func _draw_hud_world() -> void:
+    # Small, high-contrast markers that remain readable on a phone.
+    if float(player.time_charge)>=1.0:
+        draw_arc(player.pos,88.0+sin(elapsed*8.0)*7.0,0,TAU,40,Color("72dfff77"),4)
+    if frenzy_timer>0.0:
+        draw_arc(player.pos,56.0+sin(elapsed*14.0)*5.0,0,TAU,40,Color("ffd45c99"),5)
+    if ritual_timer>0.0:
+        draw_arc(player.pos,68.0+ritual_level*10.0+sin(elapsed*12.0)*4.0,-PI/2.0,-PI/2.0+TAU*float(ritual_level)/3.0,24,Color("ffd45c"),7)
+    if pulse_ring>0.0:
+        var pr := 90.0+(0.75-pulse_ring)*420.0
+        draw_arc(player.pos,pr,0,TAU,48,Color("8fdcff") if pulse_ring>0.25 else Color("8fdcff55"),6)
+
+func _draw() -> void:
+    # VISUAL PASS: procedural dark-fantasy dungeon, built entirely from Godot primitives.
+    draw_rect(Rect2(0,0,W,H),Color("070910"))
+    draw_rect(Rect2(8,108,W-16,H-108),Color("0d111c"))
+    _draw_floor()
+    _draw_wall_details()
+    _draw_torches()
+
+    # Subtle moving atmosphere.
+    draw_circle(Vector2(W/2,H/2+70),290.0+sin(elapsed*0.7)*10.0,Color("263b6010"))
+    draw_circle(Vector2(W/2,H/2+70),250.0,Color("596aa020"),false,3)
+    var grid_off := fmod(elapsed*10.0,96.0)
+    for x in range(int(WORLD.position.x),int(WORLD.end.x),96):
+        draw_line(Vector2(x+grid_off,WORLD.position.y+6),Vector2(x+grid_off,WORLD.end.y-6),Color("38415b14"),1)
+
+    _draw_portal_visual()
+
+    for a in anomalies:
+        var ac := Color("67f0c0") if a.type=="HEAL" else Color("ffd15c") if a.type=="GAMBLE" else Color("bd8cff") if a.type=="ECHO" else Color("72c9ff")
+        var ap := 1.0+sin(Time.get_ticks_msec()/160.0)*0.12
+        draw_circle(a.pos,float(a.r)*ap,ac.darkened(0.55),false,5)
+        draw_circle(a.pos,12.0,ac)
+        draw_circle(a.pos,5.0,Color("ffffff"))
+
+    for d in drops:
+        _draw_drop_visual(d)
+    for b in bullets:
+        draw_line(b.pos-b.vel.normalized()*12.0,b.pos,Color("fff3a1aa"),5)
+        draw_circle(b.pos,7.0,Color("fff3a1"))
+    for b in enemy_bullets:
+        draw_line(b.pos-b.vel.normalized()*14.0,b.pos,Color("ff4f7588"),5)
+        draw_circle(b.pos,8.0,Color("ff4f75"))
+
+    for e in enemies:
+        if e.has("boss") and boss_telegraph>0.0:
+            draw_circle(e.pos,105.0+(0.42-boss_telegraph)*90.0,Color("ff557744"),false,6)
+        _draw_enemy_visual(e)
+
+    _draw_player_visual()
+
+    if meta.loops>0 and not ghost_path.is_empty():
+        for i in ghost_path.size():
+            var gp: Vector2 = ghost_path[i]
+            var alpha := 0.10+0.20*float(i%5)/5.0
+            draw_circle(gp,4.0,Color(0.74,0.66,1.0,alpha))
     for p in particles:
         draw_circle(p.pos,max(1.0,float(p.life)*5.0),Color("ffffff"))
-    if float(player.time_charge) >= 1.0:
-        draw_circle(player.pos, 90.0 + sin(elapsed*8.0)*8.0, Color("8fdcff55"), false, 4)
-    if frenzy_timer > 0.0:
-        draw_circle(player.pos, 52.0 + sin(elapsed*14.0)*6.0, Color("ffd45c66"), false, 5)
-    if ritual_timer > 0.0:
-        draw_circle(player.pos, 62.0 + ritual_level*12.0 + sin(elapsed*12.0)*5.0, Color("ffd45c55"), false, 4)
-    if damage_flash > 0.0:
-        draw_rect(Rect2(0,0,W,H), Color(1,0.2,0.3,damage_flash*0.45))
-    # Combat rhythm indicator.
-    if ritual_level > 0:
-        var ritual_radius := 72.0 + ritual_level*8.0
-        draw_arc(player.pos, ritual_radius, -PI/2.0, -PI/2.0 + TAU*float(ritual_level)/3.0, 24, Color("ffd45c"), 7.0)
-    if pulse_ring > 0.0:
-        var pr := 90.0 + (0.75-pulse_ring)*420.0
-        draw_arc(player.pos, pr, 0.0, TAU, 48, Color("8fdcff") if pulse_ring > 0.25 else Color("8fdcff55"), 6.0)
-    draw_circle(joystick_pos,68.0,Color("ffffff18"))
-    draw_circle(joystick_pos,68.0,Color("ffffff66"),false,3)
-    var knob: Vector2 = joystick_pos+touch_dir*45.0
-    draw_circle(knob,27.0,Color("ffffff38"))
-    draw_circle(knob,27.0,Color("ffffffaa"),false,2)
-    if game_over:
-        draw_rect(Rect2(0,0,W,H),Color(0,0,0,0.55))
-        draw_string(ThemeDB.fallback_font,Vector2(0,620),"TAP TO REWIND",HORIZONTAL_ALIGNMENT_CENTER,W,34,Color("ffffff"))
 
+    _draw_hud_world()
+
+    # Mobile controls.
+    draw_circle(joystick_pos,72.0,Color("ffffff10"))
+    draw_circle(joystick_pos,72.0,Color("ffffff66"),false,3)
+    draw_circle(joystick_pos+touch_dir*45.0,29.0,Color("ffffff35"))
+    draw_circle(joystick_pos+touch_dir*45.0,29.0,Color("ffffffaa"),false,2)
+
+    if damage_flash>0.0:
+        draw_rect(Rect2(0,0,W,H),Color(1,0.12,0.25,damage_flash*0.42))
+    if game_over:
+        draw_rect(Rect2(0,0,W,H),Color(0,0,0,0.62))
+        draw_circle(Vector2(W/2,590),120,Color("ff557711"),false,5)
+        draw_string(ThemeDB.fallback_font,Vector2(0,590),"THE LOOP CLAIMS YOU",HORIZONTAL_ALIGNMENT_CENTER,W,34,Color("ffffff"))
+        draw_string(ThemeDB.fallback_font,Vector2(0,640),"TAP TO REWIND",HORIZONTAL_ALIGNMENT_CENTER,W,24,Color("d8cfff"))
 func _save() -> void:
     var f: FileAccess = FileAccess.open(SAVE_PATH,FileAccess.WRITE)
     if f:
