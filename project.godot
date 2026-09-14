@@ -5,6 +5,8 @@ run/main_scene="res://Main.tscn"
 [display]
 window/size/viewport_width=720
 window/size/viewport_height=1280
+window/size/mode=3
+window/handheld/orientation=1
 window/size/window_width_override=540
 window/size/window_height_override=960
 window/stretch/mode="canvas_items"
@@ -13,6 +15,11 @@ window/stretch/mode="canvas_items"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/default_filters/use_nearest_mipmap_filter=false
+
+[display/window]
+size/viewport_width=720
+size/viewport_height=1280
+stretch/mode="canvas_items"
 
 [input]
 move_left={"deadzone":0.3,"events":[Object(InputEventKey,"physical_keycode":65),Object(InputEventKey,"physical_keycode":4194311)]}

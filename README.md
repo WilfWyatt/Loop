@@ -20,3 +20,7 @@ No external game assets are required; the visual pass is drawn procedurally by G
 
 ## v1.3 — ECHO
 The labyrinth now shifts between chamber themes, dimensional seams appear, and a late-run Echo Stalker uses traces of the previous run.
+
+
+## v1.4 — DESCENT
+Full-screen Android-friendly project settings, stronger phone readability, procedural chamber architecture, atmospheric depth shifts, and the new Resonance combat reward.
