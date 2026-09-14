@@ -1,6 +1,6 @@
 extends Node2D
 
-# LOOP v0.7 - PARADOX: a one-minute mobile roguelite with persistent anomalies.
+# LOOP v0.8 - MIRROR: the previous loop starts fighting beside you.
 # Procedural graphics only: no external assets required.
 
 const W := 720.0
@@ -57,6 +57,11 @@ var ghost_path: Array = []
 var ghost_path_buffer: Array = []
 var ghost_timer := 0.0
 var ghost_index := 0
+var ghost_fire_timer := 0.0
+var ghost_weapon := 0
+var frenzy_timer := 0.0
+var boss_phase := 0
+var boss_attack_timer := 2.0
 
 var ui: CanvasLayer
 var hp_bar: ProgressBar
@@ -103,6 +108,11 @@ func _new_loop() -> void:
     anomaly_time = 0.0
     ghost_timer = 0.0
     ghost_index = 0
+    ghost_fire_timer = 1.0
+    ghost_weapon = int(player.weapon)
+    frenzy_timer = 0.0
+    boss_phase = 0
+    boss_attack_timer = 2.0
     ghost_path_buffer.clear()
     _choose_loop_rule()
     player.combo = 0
@@ -140,6 +150,13 @@ func _apply_meta_bonus() -> void:
         player.hp = player.max_hp
     if meta.has("relics") and data_relic("DEEP MAGNET"):
         player.magnet *= 1.35
+    if meta.has("relics") and data_relic("ECHO ARMOUR"):
+        player.max_hp += 15.0
+        player.hp = player.max_hp
+    if meta.has("relics") and data_relic("GHOST HAND"):
+        player.shot_speed *= 1.12
+    if meta.has("relics") and data_relic("PARADOX CORE"):
+        player.crit = min(0.35, player.crit + 0.05)
 
 func _build_ui() -> void:
     ui = CanvasLayer.new()
@@ -229,6 +246,7 @@ func _process(delta: float) -> void:
     anomaly_time = max(0.0, anomaly_time-delta)
     anomaly_active = anomaly_time > 0.0
     player.combo_timer = max(0.0, float(player.combo_timer)-delta)
+    frenzy_timer = max(0.0, frenzy_timer-delta)
     if player.combo_timer <= 0.0:
         player.combo = 0
     if elapsed >= LOOP_LENGTH:
@@ -358,18 +376,38 @@ func _trigger_anomaly(kind: String) -> void:
     _burst(player.pos,28,260)
 
 func _update_ghost(delta: float) -> void:
-    # A tiny memory of the previous loop: every few seconds the old path leaves a shot.
     if ghost_path.is_empty() or meta.loops <= 0:
         return
     ghost_timer -= delta
+    ghost_fire_timer -= delta
     if ghost_timer <= 0.0:
-        ghost_timer = 1.25
+        ghost_timer = 0.55
         ghost_index = (ghost_index + 1) % ghost_path.size()
         var gp: Vector2 = ghost_path[ghost_index]
         for e in enemies:
-            if gp.distance_to(e.pos) < 70.0:
-                e.hp -= 12.0
+            if gp.distance_to(e.pos) < 82.0:
+                e.hp -= 18.0 + float(meta.loops) * 1.5
         _burst(gp,4,80)
+    if ghost_fire_timer <= 0.0:
+        ghost_fire_timer = 1.55 if ghost_weapon != 1 else 1.15
+        var target: Dictionary = _nearest_enemy_from(ghost_path[ghost_index])
+        if not target.is_empty():
+            var gp: Vector2 = ghost_path[ghost_index]
+            var gd: Vector2 = (target.pos-gp).normalized()
+            var gshots: int = 2 if ghost_weapon == 2 else 1
+            for i in gshots:
+                var spread: float = (float(i)-float(gshots-1)/2.0)*0.12
+                bullets.append({"pos":gp,"vel":gd.rotated(spread)*480.0,"damage":10.0+float(meta.loops)*2.0,"life":1.2,"pierce":1,"ghost":true})
+
+func _nearest_enemy_from(origin: Vector2) -> Dictionary:
+    var best: Dictionary = {}
+    var bd: float = INF
+    for e in enemies:
+        var d: float = origin.distance_squared_to(e.pos)
+        if d < bd:
+            bd = d
+            best = e
+    return best
 
 func _memory_name() -> String:
     match int(meta.memory):
@@ -384,7 +422,7 @@ func _auto_fire() -> void:
     var target: Dictionary = _nearest_enemy()
     if target.is_empty():
         return
-    fire_timer = player.fire_rate
+    fire_timer = player.fire_rate * (0.58 if frenzy_timer > 0.0 else 1.0)
     var dir: Vector2 = (target.pos - player.pos).normalized()
     if int(player.weapon) == 1:
         dir = dir.rotated(sin(elapsed*4.0)*0.05)
@@ -392,7 +430,7 @@ func _auto_fire() -> void:
     for i in shots:
         var spread: float = (float(i) - float(shots-1)/2.0) * 0.10
         var shot_dir: Vector2 = dir.rotated(spread)
-        var bullet_damage: float = player.damage * (1.25 if int(player.weapon)==2 else 1.0)
+        var bullet_damage: float = player.damage * (1.25 if int(player.weapon)==2 else 1.0) * (1.35 if frenzy_timer > 0.0 else 1.0)
         bullets.append({"pos":player.pos, "vel":shot_dir*player.shot_speed, "damage":bullet_damage, "life":1.7, "pierce":int(player.pierce)})
     _burst(player.pos, 2, 90)
 
@@ -505,11 +543,10 @@ func _update_enemy_bullets(delta: float) -> void:
 func _update_enemies(delta: float) -> void:
     if enemy_shot_timer <= 0.0:
         enemy_shot_timer = 0.45
+    boss_attack_timer -= delta
     for i in range(enemies.size()-1,-1,-1):
         var e: Dictionary = enemies[i]
         var d: Vector2 = player.pos-e.pos
-        if anomaly_active:
-            e.speed = float(e.speed) * 0.18
         var dist: float = d.length()
         if e.get("kind","") == "shooter" and dist < 430.0:
             if float(e.get("shot_cd",1.0)) <= 0.0:
@@ -521,8 +558,21 @@ func _update_enemies(delta: float) -> void:
                 var move_speed: float = float(e.speed) * (0.18 if anomaly_active else 1.0)
                 e.pos += d.normalized()*move_speed*delta
         e.shot_cd = float(e.get("shot_cd",1.0))-delta
-        if e.has("boss") and dist > 170.0:
-            e.pos += d.normalized()*float(e.speed)*delta*0.35
+        if e.has("boss"):
+            var hp_ratio: float = float(e.hp)/float(e.max_hp)
+            var new_phase: int = 2 if hp_ratio < 0.34 else (1 if hp_ratio < 0.67 else 0)
+            if new_phase != boss_phase:
+                boss_phase = new_phase
+                _announce("BOSS PHASE %d" % (boss_phase+1))
+                _burst(e.pos,30+boss_phase*15,260)
+            if boss_attack_timer <= 0.0:
+                boss_attack_timer = 2.2 if boss_phase == 0 else (1.55 if boss_phase == 1 else 1.0)
+                var radial_count: int = 8+boss_phase*4
+                for k in radial_count:
+                    var a: float = float(k)*TAU/float(radial_count)+elapsed*0.35
+                    enemy_bullets.append({"pos":e.pos,"vel":Vector2.from_angle(a)*(180.0+boss_phase*45.0),"damage":8.0+boss_phase*3.0,"life":4.0})
+            if dist > 170.0:
+                e.pos += d.normalized()*float(e.speed)*delta*0.35
         if dist < e.r+15.0:
             var contact: float = 22.0 if e.has("boss") else (11.0 if e.get("elite",false) else 8.0)
             player.hp -= contact*delta
@@ -535,6 +585,13 @@ func _kill_enemy(index: int, e: Dictionary) -> void:
     meta.kills += 1
     player.combo = int(player.combo) + 1
     player.combo_timer = 2.4
+    if int(player.combo) == 10:
+        frenzy_timer = 6.0
+        _announce("FRENZY — 10 KILL CHAIN")
+    if int(player.combo) == 20:
+        player.time_charge = min(6.0, float(player.time_charge)+1.0)
+        score += 1000
+        _announce("PARADOX CHAIN — +1000")
     var combo_mult: float = 1.0 + min(3.0, float(player.combo) * 0.08)
     score += int(float(e.xp)*10.0*combo_mult)
     if rng.randf() < float(player.crit) and not e.has("boss"):
@@ -640,8 +697,8 @@ func _complete_loop() -> void:
         _announce("MEMORY UNLOCKED — %s" % _memory_name())
     if not meta.has("relics"):
         meta.relics = []
-    if meta.loops in [3, 6, 9]:
-        var relics := ["BLOOD CLOCK", "DEEP MAGNET", "ECHO ARMOUR"]
+    if meta.loops in [3, 6, 9, 12, 15]:
+        var relics := ["BLOOD CLOCK", "DEEP MAGNET", "ECHO ARMOUR", "GHOST HAND", "PARADOX CORE"]
         var relic: String = relics[(meta.loops/3)-1]
         if relic not in meta.relics:
             meta.relics.append(relic)
@@ -716,7 +773,8 @@ func _update_texts(delta: float) -> void:
 func _update_ui() -> void:
     var remain: float = max(0.0,LOOP_LENGTH-elapsed)
     info.text = "♥ %d/%d   ECHO %d   KILLS %d   x%d   LOOP %02d" % [int(player.hp),int(player.max_hp),int(meta.echoes),int(meta.kills),int(player.combo),int(meta.loops)+1]
-    rule_label.text = "RULE: %s   •   TIME %0.1f" % [loop_rule, float(player.time_charge)]
+    var fury_text: String = "   •   FRENZY %0.1fs" % frenzy_timer if frenzy_timer > 0.0 else ""
+    rule_label.text = "RULE: %s   •   TIME %0.1f%s" % [loop_rule, float(player.time_charge), fury_text]
     hp_bar.value = player.hp/player.max_hp*100.0
     xp_bar.value = float(player.xp)/float(player.next_xp)*100.0
     dash_button.text = "BLINK %0.1fs" % dash_timer if dash_timer > 0.0 else "BLINK"
@@ -775,6 +833,8 @@ func _draw() -> void:
         draw_circle(p.pos,max(1.0,float(p.life)*5.0),Color("ffffff"))
     if float(player.time_charge) >= 1.0:
         draw_circle(player.pos, 90.0 + sin(elapsed*8.0)*8.0, Color("8fdcff55"), false, 4)
+    if frenzy_timer > 0.0:
+        draw_circle(player.pos, 52.0 + sin(elapsed*14.0)*6.0, Color("ffd45c66"), false, 5)
     draw_circle(joystick_pos,68.0,Color("ffffff18"))
     draw_circle(joystick_pos,68.0,Color("ffffff66"),false,3)
     var knob: Vector2 = joystick_pos+touch_dir*45.0
