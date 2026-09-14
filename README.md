@@ -1,23 +1,16 @@
 # LOOP
 
-A one-minute mobile roguelite built around one question: **what happens when the game remembers you?**
+A portrait mobile roguelite built from scratch in Godot 4.
 
-## v0.5
-- 60-second runs with escalating pressure
-- Procedural enemies: chasers, swift enemies, shooters and elites
-- 45-second boss encounter
-- XP level-ups with 9 run-changing upgrades
-- Twin-shot, piercing shots and orbiting Void Shards
-- Physical XP/Echo/health pickups
-- Mobile virtual joystick
-- Mobile BLINK dash with invulnerability-style burst movement
-- Permanent Echo progression and save data
-- Hunt and Fracture events during each loop
-
-## Controls
-- Touch the lower-left joystick and drag to move.
-- Tap **BLINK** to dash.
-- Keyboard testing: WASD / arrow keys.
-- After death, tap the screen to rewind.
+## v0.6 — Memory
+- 60-second repeating runs
+- Mobile virtual joystick + BLINK + TIME PULSE
+- Four enemy behaviours, elites and bosses
+- XP upgrades, Echo currency and persistent saves
+- Combo scoring and critical echoes
+- Time Charge drops and area-clearing TIME PULSE
+- New RIFT event at 30 seconds
+- Permanent MEMORY unlocks that change future loops
+- Enlarged combat visuals for easier phone play
 
 No external assets are required.
