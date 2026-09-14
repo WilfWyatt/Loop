@@ -30,3 +30,7 @@ Open `project.godot` in Godot 4.7+ and run `Main.tscn`.
 - Damage feedback
 - Ritual Mastery upgrade
 - Expanded combat readability for mobile
+
+
+## v1.1 — LABYRINTH
+Optional exit portals now appear around 20s and 40s. Entering one advances to a harder chamber, clears the arena, grants a small reward and changes the pressure of the run. Ignoring the portal is always allowed.
