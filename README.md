@@ -1,16 +1,23 @@
 # LOOP
 
-A fully procedural mobile roguelite prototype made from scratch for the Jeff's Game project.
+A one-minute mobile roguelite built around one question: **what happens when the game remembers you?**
 
-## Concept
-Every run lasts exactly 60 seconds. Fight, collect Echoes, level up, choose mutations, and survive until the reset. Permanent Echoes make future loops stronger. The boss appears at 45 seconds and the game remembers your accumulated progress.
+## v0.5
+- 60-second runs with escalating pressure
+- Procedural enemies: chasers, swift enemies, shooters and elites
+- 45-second boss encounter
+- XP level-ups with 9 run-changing upgrades
+- Twin-shot, piercing shots and orbiting Void Shards
+- Physical XP/Echo/health pickups
+- Mobile virtual joystick
+- Mobile BLINK dash with invulnerability-style burst movement
+- Permanent Echo progression and save data
+- Hunt and Fracture events during each loop
 
 ## Controls
-- **Mobile:** drag your finger around the lower-left area to move. Weapons fire automatically.
-- **Desktop testing:** WASD / arrow keys.
-- **R:** restart a loop.
-- Tap after death to rewind.
+- Touch the lower-left joystick and drag to move.
+- Tap **BLINK** to dash.
+- Keyboard testing: WASD / arrow keys.
+- After death, tap the screen to rewind.
 
-## GitHub / Godot
-Open the folder as a Godot 4.x project and run `Main.tscn`.
-No external art assets are required; all visuals are generated procedurally in GDScript.
+No external assets are required.
