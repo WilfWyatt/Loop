@@ -10,7 +10,7 @@ const LOOP_LENGTH := 60.0
 const SAVE_PATH := "user://loop_save.json"
 
 var rng := RandomNumberGenerator.new()
-var player := {"pos": Vector2(W/2, H/2+80), "hp": 100.0, "max_hp": 100.0, "speed": 230.0, "damage": 18.0, "fire_rate": 0.34, "shot_speed": 570.0, "magnet": 70.0}
+var player := {"pos": Vector2(W/2, H/2+80), "hp": 100.0, "max_hp": 100.0, "speed": 230.0, "damage": 18.0, "fire_rate": 0.34, "shot_speed": 570.0, "magnet": 70.0, "xp": 0, "next_xp": 60, "move_dir": Vector2.ZERO}
 var bullets: Array = []
 var enemies: Array = []
 var drops: Array = []
@@ -29,6 +29,8 @@ var choosing := false
 var upgrade_choices: Array = []
 var touch_dir := Vector2.ZERO
 var touch_active := false
+var touch_start := Vector2.ZERO
+var joystick_pos := Vector2(105, H-125)
 var rng_seed := 0
 
 var ui: CanvasLayer
@@ -57,6 +59,7 @@ func _new_loop() -> void:
     paused = false
     game_over = false
     touch_dir = Vector2.ZERO
+    touch_active = false
     _apply_meta_bonus()
     _announce("LOOP %02d — LEARN FAST" % (meta.loops + 1))
     queue_redraw()
@@ -229,15 +232,27 @@ func _die() -> void:
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
         if event.pressed:
-            if game_over: _new_loop(); return
-            touch_active=true; _set_touch_dir(event.position)
-        else: touch_active=false; touch_dir=Vector2.ZERO
-    elif event is InputEventScreenDrag and touch_active: _set_touch_dir(event.position)
-    elif event is InputEventKey and event.pressed and event.keycode==KEY_R: _new_loop()
+            if game_over:
+                _new_loop()
+                return
+            # Only touches in the lower-left joystick zone control movement.
+            if event.position.x < 300.0 and event.position.y > H-300.0:
+                touch_active = true
+                touch_start = joystick_pos
+                _set_touch_dir(event.position)
+        else:
+            touch_active = false
+            touch_dir = Vector2.ZERO
+    elif event is InputEventScreenDrag and touch_active:
+        _set_touch_dir(event.position)
+    elif event is InputEventKey and event.pressed and event.keycode == KEY_R:
+        _new_loop()
 
 func _set_touch_dir(p:Vector2) -> void:
-    var centre=Vector2(110,H-125); touch_dir=(p-centre)/130.0
-    if touch_dir.length()>1: touch_dir=touch_dir.normalized()
+    var offset := p - touch_start
+    if offset.length() > 130.0:
+        offset = offset.normalized() * 130.0
+    touch_dir = offset / 130.0
 
 func _burst(p:Vector2,n:int,speed:float) -> void:
     for i in n:
@@ -285,6 +300,12 @@ func _draw() -> void:
     var side=d.rotated(2.5)*13; var tip=player.pos+d*20
     draw_colored_polygon(PackedVector2Array([tip,player.pos-side,player.pos-side*0.35-d*5,player.pos+side]),Color("5ce1ff"))
     for p in particles: draw_circle(p.pos,max(1.0,p.life*5),Color("ffffff"))
+    # Mobile virtual joystick.
+    draw_circle(joystick_pos, 68, Color("ffffff18"))
+    draw_circle(joystick_pos, 68, Color("ffffff66"), false, 3)
+    var knob := joystick_pos + touch_dir * 45.0
+    draw_circle(knob, 27, Color("ffffff38"))
+    draw_circle(knob, 27, Color("ffffffaa"), false, 2)
     if game_over:
         draw_rect(Rect2(0,0,W,H),Color(0,0,0,0.55))
         draw_string(ThemeDB.fallback_font,Vector2(0,620),"TAP TO REWIND",HORIZONTAL_ALIGNMENT_CENTER,W,34,Color("ffffff"))
