@@ -22,3 +22,11 @@ Open `project.godot` in Godot 4.7+ and run `Main.tscn`.
 - Added permanent relic milestones through loop 15.
 - Fixed anomaly movement so slowing time no longer permanently destroys enemy speed.
 - Mobile controls remain touch-first with visible joystick.
+
+
+## v1.0 additions
+- Ritual combo system
+- Boss attack telegraphs
+- Damage feedback
+- Ritual Mastery upgrade
+- Expanded combat readability for mobile
