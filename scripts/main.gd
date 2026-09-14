@@ -114,24 +114,24 @@ func _move_player(delta: float) -> void:
 func _auto_fire() -> void:
     if fire_timer > 0: return
     var target = _nearest_enemy()
-    if target == null: return
+    if target.is_empty(): return
     fire_timer = player.fire_rate
     var dir: Vector2 = (target.pos - player.pos).normalized()
     bullets.append({"pos": player.pos, "vel": dir * player.shot_speed, "damage": player.damage, "life": 1.7})
     _burst(player.pos, 2, 90)
 
 func _nearest_enemy():
-    var best = null; var bd := INF
+    var best: Dictionary = {}; var bd: float = INF
     for e in enemies:
         var d = player.pos.distance_squared_to(e.pos)
         if d < bd: bd = d; best = e
     return best
 
 func _spawn_enemies(delta: float) -> void:
-    var intensity := 1.0 + elapsed / 38.0 + meta.loops * 0.04
+    var intensity: float = 1.0 + elapsed / 38.0 + float(meta.loops) * 0.04
     if spawn_timer <= 0:
         spawn_timer = max(0.22, 0.85 - elapsed*0.006)
-        var count := 1
+        var count: int = 1
         if rng.randf() < min(0.45, elapsed/120.0): count += 1
         for i in count: _spawn_enemy(intensity)
     if not boss_spawned and elapsed >= 45.0:
@@ -290,13 +290,13 @@ func _draw() -> void:
         draw_string(ThemeDB.fallback_font,Vector2(0,620),"TAP TO REWIND",HORIZONTAL_ALIGNMENT_CENTER,W,34,Color("ffffff"))
 
 func _save()->void:
-    var f=FileAccess.open(SAVE_PATH,FileAccess.WRITE); if f: f.store_string(JSON.stringify(meta)); f.close()
+    var f: FileAccess = FileAccess.open(SAVE_PATH,FileAccess.WRITE); if f: f.store_string(JSON.stringify(meta)); f.close()
 
 func _load_save()->void:
     if not FileAccess.file_exists(SAVE_PATH):
         meta={"echoes":0,"loops":0,"kills":0,"best":0}; return
     var f=FileAccess.open(SAVE_PATH,FileAccess.READ)
-    var data=JSON.parse_string(f.get_as_text()); f.close()
+    var data: Variant = JSON.parse_string(f.get_as_text()); f.close()
     if data is Dictionary:
         for k in meta:
             if data.has(k): meta[k]=data[k]
