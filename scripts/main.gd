@@ -1,6 +1,6 @@
 extends Node2D
 
-# LOOP v0.5 - a fast one-minute mobile roguelite.
+# LOOP v0.7 - PARADOX: a one-minute mobile roguelite with persistent anomalies.
 # Procedural graphics only: no external assets required.
 
 const W := 720.0
@@ -46,6 +46,17 @@ var joystick_pos := Vector2(105, H-125)
 var dash_pos := Vector2(W-105, H-125)
 var dash_touch_id := -1
 var rng_seed := 0
+var anomalies: Array = []
+var anomaly_timer := 0.0
+var anomaly_active := false
+var anomaly_type := ""
+var anomaly_time := 0.0
+var loop_rule := ""
+var rule_multiplier := 1.0
+var ghost_path: Array = []
+var ghost_path_buffer: Array = []
+var ghost_timer := 0.0
+var ghost_index := 0
 
 var ui: CanvasLayer
 var hp_bar: ProgressBar
@@ -53,6 +64,7 @@ var xp_bar: ProgressBar
 var info: Label
 var banner: Label
 var hint: Label
+var rule_label: Label
 var dash_button: Button
 var pulse_button: Button
 var upgrade_panel: Panel
@@ -84,6 +96,15 @@ func _new_loop() -> void:
     event40_done = false
     event30_done = false
     choosing = false
+    anomalies.clear()
+    anomaly_timer = 8.0
+    anomaly_active = false
+    anomaly_type = ""
+    anomaly_time = 0.0
+    ghost_timer = 0.0
+    ghost_index = 0
+    ghost_path_buffer.clear()
+    _choose_loop_rule()
     player.combo = 0
     player.combo_timer = 0.0
     player.time_charge = 0.0
@@ -114,6 +135,11 @@ func _apply_meta_bonus() -> void:
         player.fire_rate *= 0.90
     elif mem >= 3:
         player.speed *= 1.10
+    if meta.has("relics") and data_relic("BLOOD CLOCK"):
+        player.max_hp += 20.0
+        player.hp = player.max_hp
+    if meta.has("relics") and data_relic("DEEP MAGNET"):
+        player.magnet *= 1.35
 
 func _build_ui() -> void:
     ui = CanvasLayer.new()
@@ -139,6 +165,12 @@ func _build_ui() -> void:
     banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     banner.add_theme_font_size_override("font_size", 20)
     ui.add_child(banner)
+    rule_label = Label.new()
+    rule_label.position = Vector2(24, 122)
+    rule_label.size = Vector2(672, 30)
+    rule_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    rule_label.add_theme_font_size_override("font_size", 16)
+    ui.add_child(rule_label)
     hint = Label.new()
     hint.position = Vector2(28, H-205)
     hint.size = Vector2(300, 35)
@@ -194,6 +226,8 @@ func _process(delta: float) -> void:
     spawn_timer -= delta
     enemy_shot_timer -= delta
     dash_timer = max(0.0, dash_timer-delta)
+    anomaly_time = max(0.0, anomaly_time-delta)
+    anomaly_active = anomaly_time > 0.0
     player.combo_timer = max(0.0, float(player.combo_timer)-delta)
     if player.combo_timer <= 0.0:
         player.combo = 0
@@ -202,9 +236,15 @@ func _process(delta: float) -> void:
         return
     _input_move()
     _move_player(delta)
+    if ghost_path_buffer.is_empty() or ghost_path_buffer[-1].distance_to(player.pos) > 45.0:
+        ghost_path_buffer.append(player.pos)
+        if ghost_path_buffer.size() > 48:
+            ghost_path_buffer.pop_front()
     _auto_fire()
     _update_orbit()
     _spawn_enemies(delta)
+    _update_anomalies(delta)
+    _update_ghost(delta)
     _update_bullets(delta)
     _update_enemy_bullets(delta)
     _update_enemies(delta)
@@ -256,6 +296,81 @@ func _time_pulse() -> void:
     _burst(player.pos,35,320)
     _announce("TIME PULSE")
 
+func data_relic(name: String) -> bool:
+    return name in meta.get("relics", [])
+
+func _choose_loop_rule() -> void:
+    var rules := ["RAPID LOOP", "HEAVY WORLD", "GREEDY WORLD", "HUNGRY WORLD", "CLEAR SKIES"]
+    loop_rule = rules[rng.randi_range(0, rules.size()-1)]
+    rule_multiplier = 1.0
+    match loop_rule:
+        "RAPID LOOP": rule_multiplier = 1.18
+        "HEAVY WORLD": rule_multiplier = 0.86
+        "GREEDY WORLD": rule_multiplier = 1.0
+        "HUNGRY WORLD": rule_multiplier = 1.08
+        "CLEAR SKIES": rule_multiplier = 0.95
+
+func _spawn_anomaly() -> void:
+    var types := ["HEAL", "GAMBLE", "ECHO", "STASIS"]
+    anomaly_type = types[rng.randi_range(0, types.size()-1)]
+    var p := Vector2(rng.randf_range(WORLD.position.x+80,WORLD.end.x-80), rng.randf_range(WORLD.position.y+100,WORLD.end.y-80))
+    anomalies.append({"pos":p,"type":anomaly_type,"life":14.0,"r":34.0})
+    _announce("ANOMALY — %s" % anomaly_type)
+
+func _update_anomalies(delta: float) -> void:
+    anomaly_timer -= delta
+    if anomaly_timer <= 0.0 and anomalies.size() < 1 and elapsed > 7.0 and elapsed < 54.0:
+        anomaly_timer = rng.randf_range(11.0,17.0)
+        _spawn_anomaly()
+    for i in range(anomalies.size()-1,-1,-1):
+        var a: Dictionary = anomalies[i]
+        a.life -= delta
+        if a.pos.distance_to(player.pos) < a.r + 20.0:
+            _trigger_anomaly(a.type)
+            anomalies.remove_at(i)
+        elif a.life <= 0.0:
+            anomalies.remove_at(i)
+        else:
+            anomalies[i] = a
+
+func _trigger_anomaly(kind: String) -> void:
+    match kind:
+        "HEAL":
+            player.hp = min(player.max_hp, player.hp + 35.0)
+            player.time_charge = min(6.0, float(player.time_charge)+1.0)
+            score += 120
+            _announce("ANOMALY STABILIZED — +HP +TIME")
+        "GAMBLE":
+            score += 500
+            for i in 4:
+                _spawn_enemy(1.8, true)
+            _announce("ANOMALY GAMBLE — +500 / ELITES AWAKEN")
+        "ECHO":
+            player.damage *= 1.22
+            player.fire_rate *= 0.82
+            score += 250
+            _announce("ECHO OVERDRIVE — WEAPON EVOLVED")
+        "STASIS":
+            anomaly_active = true
+            anomaly_time = 4.0
+            score += 180
+            _announce("STASIS — TIME CRACKS")
+    _burst(player.pos,28,260)
+
+func _update_ghost(delta: float) -> void:
+    # A tiny memory of the previous loop: every few seconds the old path leaves a shot.
+    if ghost_path.is_empty() or meta.loops <= 0:
+        return
+    ghost_timer -= delta
+    if ghost_timer <= 0.0:
+        ghost_timer = 1.25
+        ghost_index = (ghost_index + 1) % ghost_path.size()
+        var gp: Vector2 = ghost_path[ghost_index]
+        for e in enemies:
+            if gp.distance_to(e.pos) < 70.0:
+                e.hp -= 12.0
+        _burst(gp,4,80)
+
 func _memory_name() -> String:
     match int(meta.memory):
         1: return "TRUE SIGHT"
@@ -292,7 +407,7 @@ func _nearest_enemy() -> Dictionary:
     return best
 
 func _spawn_enemies(delta: float) -> void:
-    var intensity: float = 1.0 + elapsed/38.0 + float(meta.loops)*0.04
+    var intensity: float = (1.0 + elapsed/38.0 + float(meta.loops)*0.04) * rule_multiplier
     if spawn_timer <= 0.0:
         spawn_timer = max(0.18, 0.78-elapsed*0.005)
         var count: int = 1
@@ -393,6 +508,8 @@ func _update_enemies(delta: float) -> void:
     for i in range(enemies.size()-1,-1,-1):
         var e: Dictionary = enemies[i]
         var d: Vector2 = player.pos-e.pos
+        if anomaly_active:
+            e.speed = float(e.speed) * 0.18
         var dist: float = d.length()
         if e.get("kind","") == "shooter" and dist < 430.0:
             if float(e.get("shot_cd",1.0)) <= 0.0:
@@ -401,7 +518,8 @@ func _update_enemies(delta: float) -> void:
                 e.shot_cd = 2.0
         else:
             if dist > 1.0:
-                e.pos += d.normalized()*float(e.speed)*delta
+                var move_speed: float = float(e.speed) * (0.18 if anomaly_active else 1.0)
+                e.pos += d.normalized()*move_speed*delta
         e.shot_cd = float(e.get("shot_cd",1.0))-delta
         if e.has("boss") and dist > 170.0:
             e.pos += d.normalized()*float(e.speed)*delta*0.35
@@ -510,6 +628,9 @@ func _update_orbit() -> void:
                     break
 
 func _complete_loop() -> void:
+    ghost_path.clear()
+    for p in ghost_path_buffer:
+        ghost_path.append(p)
     meta.loops += 1
     meta.best = max(int(meta.best),score)
     var reward: int = 3+int(score/1000)
@@ -517,6 +638,14 @@ func _complete_loop() -> void:
     if meta.loops >= 2 and int(meta.memory) < 3:
         meta.memory += 1
         _announce("MEMORY UNLOCKED — %s" % _memory_name())
+    if not meta.has("relics"):
+        meta.relics = []
+    if meta.loops in [3, 6, 9]:
+        var relics := ["BLOOD CLOCK", "DEEP MAGNET", "ECHO ARMOUR"]
+        var relic: String = relics[(meta.loops/3)-1]
+        if relic not in meta.relics:
+            meta.relics.append(relic)
+            _announce("PERMANENT RELIC — %s" % relic)
     _save()
     _announce("RESET — +%d ECHOES" % reward)
     await get_tree().create_timer(1.4).timeout
@@ -587,6 +716,7 @@ func _update_texts(delta: float) -> void:
 func _update_ui() -> void:
     var remain: float = max(0.0,LOOP_LENGTH-elapsed)
     info.text = "♥ %d/%d   ECHO %d   KILLS %d   x%d   LOOP %02d" % [int(player.hp),int(player.max_hp),int(meta.echoes),int(meta.kills),int(player.combo),int(meta.loops)+1]
+    rule_label.text = "RULE: %s   •   TIME %0.1f" % [loop_rule, float(player.time_charge)]
     hp_bar.value = player.hp/player.max_hp*100.0
     xp_bar.value = float(player.xp)/float(player.next_xp)*100.0
     dash_button.text = "BLINK %0.1fs" % dash_timer if dash_timer > 0.0 else "BLINK"
@@ -604,6 +734,11 @@ func _draw() -> void:
         draw_line(Vector2(x+off,WORLD.position.y),Vector2(x+off,WORLD.end.y),Color("242942"),1)
     for y in range(int(WORLD.position.y)-60,int(WORLD.end.y)+60,60):
         draw_line(Vector2(WORLD.position.x,y+off),Vector2(WORLD.end.x,y+off),Color("242942"),1)
+    for a in anomalies:
+        var ac := Color("67f0c0") if a.type=="HEAL" else Color("ffd15c") if a.type=="GAMBLE" else Color("bd8cff") if a.type=="ECHO" else Color("72c9ff")
+        var pulse := 1.0 + sin(Time.get_ticks_msec()/160.0)*0.10
+        draw_circle(a.pos, float(a.r)*pulse, ac, false, 5)
+        draw_circle(a.pos, 12.0, ac)
     for d in drops:
         var pulse: float = 1.0+sin(Time.get_ticks_msec()/130.0+float(d.pos.x))*0.12
         var c := Color("5cf2a5") if d.kind=="xp" else Color("ffd85c") if d.kind=="echo" else Color("ff6f91")
@@ -633,6 +768,9 @@ func _draw() -> void:
     var tip: Vector2 = player.pos+d*30.0
     var ship_c := Color("ffffff") if dash_flash>0.0 else Color("5ce1ff")
     draw_colored_polygon(PackedVector2Array([tip,player.pos-side,player.pos-side*0.35-d*5.0,player.pos+side]),ship_c)
+    if meta.loops > 0 and not ghost_path.is_empty():
+        for gp in ghost_path:
+            draw_circle(gp, 4.0, Color("bda8ff55"))
     for p in particles:
         draw_circle(p.pos,max(1.0,float(p.life)*5.0),Color("ffffff"))
     if float(player.time_charge) >= 1.0:
@@ -654,7 +792,7 @@ func _save() -> void:
 
 func _load_save() -> void:
     if not FileAccess.file_exists(SAVE_PATH):
-        meta={"echoes":0,"loops":0,"kills":0,"best":0,"dash_level":0,"memory":0}
+        meta={"echoes":0,"loops":0,"kills":0,"best":0,"dash_level":0,"memory":0,"relics":[]}
         return
     var f := FileAccess.open(SAVE_PATH,FileAccess.READ)
     var data: Variant = JSON.parse_string(f.get_as_text())
@@ -663,6 +801,8 @@ func _load_save() -> void:
         for k in meta:
             if data.has(k):
                 meta[k]=data[k]
+        if not meta.has("relics"):
+            meta.relics = []
     player.xp=0
     player.next_xp=60
     player.move_dir=Vector2.ZERO
